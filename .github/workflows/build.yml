@@ -1,159 +1,84 @@
-name: Release
-
+name: build
 on:
+  workflow_dispatch:
   push:
-    tags:
-      - "v*"
-  workflow_dispatch:  # 新增这一行，开启手动运行按钮
-  
-env:
-  GOVERSION: "stable"
-  VERSION: "0.0.0"
-  NAME: "smarteduTool"
-  FULLNAME: "SmarteduTool"
+    branches: [ main ]
 
 jobs:
-  package:
-    strategy:
-      matrix:
-        os: [linux, windows, macos-arm, macos-intel]
-        include:
-          - os: linux
-            runs-on: ubuntu-latest
-            package-os: linux
-            artifact-suffix: linux
-            package-extension: tar.xz
-            setup: |
-              sudo apt-get update
-              sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libfuse2 libxkbcommon-dev
-
-          - os: windows
-            runs-on: windows-latest
-            package-os: windows
-            artifact-suffix: windows-x64
-            package-extension: zip
-            setup: |
-              pacman -Syu --noconfirm
-              pacman -S --noconfirm git zip mingw-w64-x86_64-toolchain
-            shell: msys2 {0}
-
-          - os: macos-arm
-            runs-on: macos-15 # macos-latest
-            package-os: darwin
-            artifact-suffix: macos-arm64
-            package-extension: zip
-            setup: |
-              # No additional setup needed beyond Xcode
-
-          - os: macos-intel
-            runs-on: macos-15-intel
-            package-os: darwin
-            artifact-suffix: macos-intel64
-            package-extension: zip
-            setup: |
-              # No additional setup needed beyond Xcode
-
-    runs-on: ${{ matrix.runs-on }}
-    defaults:
-      run:
-        shell: ${{ matrix.shell || 'bash' }}
-
+  # Windows 打包：隐藏CMD黑窗 + fyne打包内置EXE图标
+  build-windows:
+    runs-on: windows-latest
     steps:
-      - name: Set up MSYS2 (Windows only)
-        if: matrix.os == 'windows'
-        uses: msys2/setup-msys2@v2
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置Go环境
+        uses: actions/setup-go@v5
         with:
-          path-type: inherit
-          update: true
+          go-version: '1.22'
 
-      - name: Set up Xcode (macOS only)
-        if: contains(matrix.os, 'macos')
-        uses: maxim-lobanov/setup-xcode@v1
+      - name: 设置国内Go代理
+        run: go env -w GOPROXY=https://goproxy.cn,direct
+
+      - name: 安装Fyne打包工具
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+
+      - name: Windows打包（隐藏控制台+绑定图标+发布精简版）
+        run: fyne package -os windows -icon icon.png -release
+
+      - name: 上传Windows打包产物
+        uses: actions/upload-artifact@v4
         with:
-          xcode-version: latest-stable
+          name: smartedu-dl-Windows
+          path: smartedu-dl.exe
 
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GOVERSION }}
-
-      - name: Install Dependencies
-        if: matrix.setup != ''
-        run: ${{ matrix.setup }}
-
-      - name: Install Fyne tool
-        run: |
-          go install fyne.io/tools/cmd/fyne@latest
-          fyne version
-
-      - name: Update app version
-        continue-on-error: true
-        run: |
-          GIT_TAG=$(git describe --tags --always)
-          APP_VERSION=${GIT_TAG#v}
-          sed -i.bak -E "s/(\s*Version).*/\1 = \"$APP_VERSION\"/" FyneApp.toml
-
-      - name: Package Fyne app
-        run: fyne package -os ${{ matrix.package-os }} --release
-
-      - name: Set version
-        run: |
-          VERSION=${{ github.ref_name }}
-          echo "VERSION=${VERSION:1}" >> $GITHUB_ENV
-
-      - name: Tar package
-        run: |
-          name=${{ env.NAME }}-${{ env.VERSION }}-${{ matrix.artifact-suffix }}.${{ matrix.package-extension }}
-          if [[ ${{ matrix.package-os }} == "linux" ]]; then
-            mv "${{ env.FULLNAME }}.tar.xz" $name
-          elif [[ ${{ matrix.package-os }} == "windows" ]]; then
-            zip $name "${{ env.FULLNAME }}.exe"
-          else
-            zip --symlinks -r $name "${{ env.FULLNAME }}.app/"
-          fi
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ env.NAME }}-${{ matrix.artifact-suffix }}
-          path: ${{ env.NAME }}-${{ env.VERSION }}-${{ matrix.artifact-suffix }}.${{ matrix.package-extension }}
-          if-no-files-found: error
-          overwrite: true
-
-  release:
-    needs: [package]
+  # Linux 打包
+  build-linux:
     runs-on: ubuntu-latest
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v8
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置Go环境
+        uses: actions/setup-go@v5
         with:
-          path: artifacts
-          pattern: ${{ env.NAME }}-*
-          merge-multiple: true
+          go-version: '1.22'
 
-      - name: List all files
-        run: ls -R artifacts
+      - name: 安装Fyne系统依赖
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
 
-      # - name: Make version string
-      #   run: |
-      #     VERSION=${{ github.ref_name }}
-      #     echo "VERSION=${VERSION:1}" >> $GITHUB_ENV
+      - name: 设置国内Go代理
+        run: go env -w GOPROXY=https://goproxy.cn,direct
 
-      - name: Generate SHA256 checksums
-        run: |
-          cd artifacts
-          sha256sum *.zip *.tar.xz > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+      - name: Linux打包
+        run: fyne package -os linux -icon app_icon.png -release
 
-      - name: Release
-        uses: softprops/action-gh-release@v3
-        # env:
-        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 上传Linux打包产物
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            artifacts/SHA256SUMS.txt
-            artifacts/*.zip
-            artifacts/*.tar.xz
+          name: smartedu-dl-Linux
+          path: smartedu-dl
+
+  # MacOS 打包
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 配置Go环境
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: 设置国内Go代理
+        run: go env -w GOPROXY=https://goproxy.cn,direct
+
+      - name: Mac打包
+        run: fyne package -os darwin -icon app_icon.png -release
+
+      - name: 上传Mac打包产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartedu-dl-macOS
+          path: smartedu-dl.app
