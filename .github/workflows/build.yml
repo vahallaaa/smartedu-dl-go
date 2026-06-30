@@ -1,4 +1,4 @@
-name: Fyne桌面项目跨平台编译打包
+name: Build
 on:
   workflow_dispatch:
   push:
@@ -14,8 +14,8 @@ jobs:
           go-version: '1.22'
       - name: 配置Go代理
         run: go env -w GOPROXY=https://goproxy.cn,direct
-      - name: 编译Windows可执行程序
-        run: go build -o smartedu-dl.exe
+      - name: 编译Windows可执行程序（隐藏CMD黑窗）
+        run: go build -ldflags="-s -w -H windowsgui" -o smartedu-dl.exe
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
