@@ -20,7 +20,7 @@ func InitUI(isLocal bool, maxConcurrency int, saveFetchedData bool) {
 	a.Settings().SetTheme(customTheme)
 
 	metadata := a.Metadata()
-	w := a.NewWindow(metadata.Name)
+	w := a.NewWindow('SmarteduTool')
 	// Menu and title
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.SettingsIcon(), func() {
