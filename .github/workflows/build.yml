@@ -1,49 +1,59 @@
-name: 跨平台编译打包
-
-# 触发规则：支持手动点击运行 + 提交代码自动打包
+name: Fyne桌面项目跨平台编译打包
 on:
-  workflow_dispatch:  # 必须加，才有Run workflow手动按钮
+  workflow_dispatch:
   push:
     branches: [ main ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        # 打包三大主流64位系统
-        build:
-          - { GOOS: windows, GOARCH: amd64, NAME: smartedu-dl-windows, SUFFIX: .exe }
-          - { GOOS: linux, GOARCH: amd64, NAME: smartedu-dl-linux, SUFFIX: '' }
-          - { GOOS: darwin, GOARCH: amd64, NAME: smartedu-dl-macos, SUFFIX: '' }
-
+  build-windows:
+    runs-on: windows-latest
     steps:
-      # 1.拉取源码
-      - name: 拉取项目代码
-        uses: actions/checkout@v4
-
-      # 2.配置Go语言环境
-      - name: 安装Go环境
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
-      # 3.设置国内Go代理，解决依赖下载超时
-      - name: 配置GOPROXY国内镜像
+      - name: 配置Go代理
         run: go env -w GOPROXY=https://goproxy.cn,direct
-
-      # 4.静态跨平台编译（CGO关闭，打包无需系统依赖）
-      - name: 编译可执行文件
-        env:
-          CGO_ENABLED: 0
-          GOOS: ${{ matrix.build.GOOS }}
-          GOARCH: ${{ matrix.build.GOARCH }}
-        run: |
-          go build -o ./build/${{ matrix.build.NAME }}${{ matrix.build.SUFFIX }}
-
-      # 5.上传编译好的程序，供下载
-      - name: 上传编译产物
+      - name: 编译Windows可执行程序
+        run: go build -o smartedu-dl.exe
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.build.NAME }}
-          path: build/
+          name: smartedu-dl-windows
+          path: smartedu-dl.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: 安装Fyne依赖库
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+      - name: 配置Go代理
+        run: go env -w GOPROXY=https://goproxy.cn,direct
+      - name: 编译Linux程序
+        run: go build -o smartedu-dl-linux
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartedu-dl-linux
+          path: smartedu-dl-linux
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: 配置Go代理
+        run: go env -w GOPROXY=https://goproxy.cn,direct
+      - name: 编译Mac程序
+        run: go build -o smartedu-dl-macos
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartedu-dl-macos
+          path: smartedu-dl-macos
