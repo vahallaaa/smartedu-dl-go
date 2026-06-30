@@ -33,9 +33,9 @@ jobs:
             artifact-suffix: windows-x64
             package-extension: zip
             setup: |
-              pacman -Syu --noconfirm
-              pacman -S --noconfirm git zip mingw-w64-x86_64-toolchain
-            shell: msys2 {0}
+              pacman -Syu --noconfirm --overwrite '*'
+              pacman -S --noconfirm --overwrite '*' git zip mingw-w64-x86_64-toolchain
+              shell: msys2 {0}
 
           - os: macos-arm
             runs-on: macos-15 # macos-latest
@@ -46,7 +46,7 @@ jobs:
               # No additional setup needed beyond Xcode
 
           - os: macos-intel
-            runs-on: macos-15-intel
+            runs-on: macos-14
             package-os: darwin
             artifact-suffix: macos-intel64
             package-extension: zip
@@ -64,7 +64,7 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           path-type: inherit
-          update: true
+          update: false  # 关键修改：关闭插件自动更新
 
       - name: Set up Xcode (macOS only)
         if: contains(matrix.os, 'macos')
@@ -149,8 +149,8 @@ jobs:
 
       - name: Release
         uses: softprops/action-gh-release@v3
-        # env:
-        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env:
+         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
           files: |
